@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>⚡ 단어 시험기 (채점 기능 추가)</title>
+    <style>
+        body {
+            font-family: 'Malgun Gothic', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+            background-color: #f5f6fa;
+            margin: 0;
+            padding: 40px 20px;
+            box-sizing: border-box;
+        }
+        .test-box {
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            text-align: center;
+            width: 100%;
+            max-width: 600px; /* 버튼 공간 확보를 위해 폭을 조금 늘렸습니다 */
+        }
+        h2 { color: #2f3640; margin-bottom: 20px; }
+
+        .word-list {
+            text-align: left;
+            margin: 30px 0;
+            padding: 0;
+            list-style: none;
+        }
+        .word-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 10px;
+            border-bottom: 1px solid #eee;
+        }
+
+        /* 💡 이미지처럼 글자가 겹치지 않고 아래로 부드럽게 깨지도록 줄바꿈 처리 */
+        .word-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column; /* 단어 아래에 뜻이 오도록 설정 (원하시면 row로 변경 가능) */
+            gap: 5px;
+            padding-right: 15px;
+            word-break: break-all; /* 긴 단어도 자동 줄바꿈 */
+        }
+        .english {
+            font-size: 20px;
+            font-weight: bold;
+            color: #ef5777;
+        }
+        .korean {
+            font-size: 16px;
+            color: #4b7bec;
+            font-weight: 600;
+            display: none; /* 기본적으로 숨김 */
+        }
+        .word-list.show-answers .korean {
+            display: block; /* 정답 확인 시 블록 형태로 아래에 깔끔하게 배치 */
+        }
+
+        /* 채점 버튼 스타일 */
+        .score-box {
+            display: flex;
+            gap: 5px;
+        }
+        .score-btn {
+            border: 2px solid #dcdde1;
+            background: white;
+            padding: 6px 12px;
+            font-size: 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: 0.2s;
+        }
+        .score-btn.correct { color: #2ecc71; }
+        .score-btn.correct.active { background: #2ecc71; color: white; border-color: #2ecc71; }
+        .score-btn.wrong { color: #e74c3c; }
+        .score-btn.wrong.active { background: #e74c3c; color: white; border-color: #e74c3c; }
+
+        /* 하단 컨트롤 버튼 */
+        .btn-container {
+            margin-top: 25px;
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+        }
+        button.main-btn {
+            background-color: #4b7bec;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            font-size: 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        button.main-btn:hover { background-color: #3867d6; }
+        button.submit-btn { background-color: #10ac84; }
+        button.submit-btn:hover { background-color: #0ebd7e; }
+    </style>
+</head>
+<body>
+
+<div class="test-box">
+    <h2>✏️ 영단어 채점 테스트</h2>
+
+    <ul id="wordList" class="word-list">
+        <li style="text-align: center; color: #7f8c8d;">로딩 중...</li>
+    </ul>
+
+    <div class="btn-container">
+        <button class="main-btn" onclick="showAnswers()">정답 확인 👁️</button>
+        <button class="main-btn submit-btn" onclick="submitResult()">결과 전송 📤</button>
+    </div>
+</div>
+
+<script>
+    let wordData = [];
+
+    window.onload = function() {
+        fetch('/api/word/test')
+            .then(res => res.json())
+            .then(data => {
+                // 각 단어 객체에 사용자의 '채점 결과(isCorrect)'를 저장할 상태 공간을 미리 추가합니다.
+                wordData = data.map(item => ({ ...item, isCorrect: null }));
+                if (wordData.length > 0) {
+                    renderWords();
+                } else {
+                    document.getElementById('wordList').innerHTML = "<li style='text-align:center; color:#e74c3c;'>❌ 단어가 없습니다.</li>";
+                }
+            })
+            .catch(err => {
+                document.getElementById('wordList').innerHTML = "<li style='text-align:center; color:#e74c3c;'>⚠️ 에러 발생</li>";
+                console.error(err);
+            });
+    };
+
+    function renderWords() {
+        const wordListEl = document.getElementById('wordList');
+        wordListEl.innerHTML = '';
+
+        wordData.forEach((item, index) => {
+            const li = document.createElement('li');
+            li.className = 'word-item';
+
+            li.innerHTML = `
+                <div class="word-content">
+                    <span class="english">${item.word}</span>
+                    <span class="korean">${item.meaning}</span>
+                </div>
+                <div class="score-box">
+                    <button class="score-btn correct" onclick="markWord(${index}, true, this)">O</button>
+                    <button class="score-btn wrong" onclick="markWord(${index}, false, this)">X</button>
+                </div>
+            `;
+            wordListEl.appendChild(li);
+        });
+    }
+
+    // 정답 확인 버튼
+    function showAnswers() {
+        document.getElementById('wordList').classList.add('show-answers');
+    }
+
+    // O, X 채점 선택 시 호출되는 함수
+    function markWord(index, isCorrect, btnElement) {
+        // 데이터 배열에 결과 저장
+        wordData[index].isCorrect = isCorrect;
+
+        // 버튼 토글 디자인 처리
+        const parent = btnElement.parentElement;
+        const buttons = parent.querySelectorAll('.score-btn');
+        buttons.forEach(btn => btn.classList.remove('active'));
+        btnElement.classList.add('active');
+    }
+
+    // 백엔드로 채점 데이터 전송하는 함수
+    function submitResult() {
+        // 채점 안 한 단어가 있는지 검사
+        const unmarked = wordData.some(item => item.isCorrect === null);
+        if (un-marked) {
+            alert("⚠️ 아직 채점하지 않은 단어가 있습니다! 모두 체크해 주세요.");
+            return;
+        }
+
+        // 전송할 데이터 포맷 가공 (서버에 WordId와 맞았는지 여부 전송)
+        const resultData = wordData.map(item => ({
+            wordId: item.wordId,
+            word: item.word,
+            isCorrect: item.isCorrect
+        }));
+
+        fetch('/api/word/result', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(resultData)
+        })
+        .then(res => {
+            if(res.ok) {
+                alert("🎉 채점 결과가 성공적으로 저장되었습니다!");
+            } else {
+                alert("❌ 전송 실패 (서버 에러)");
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            alert("⚠️ 네트워크 오류가 발생했습니다.");
+        });
+    }
+</script>
+</body>
+</html>
