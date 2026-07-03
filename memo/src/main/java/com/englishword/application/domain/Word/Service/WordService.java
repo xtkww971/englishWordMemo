@@ -47,6 +47,10 @@ public class WordService {
         return words;
     }
 
+    public List<Word> getWrongWords() {
+        return wordRepository.findWrongWords();
+    }
+
     @Transactional
     public void reportWrongWords(List<Long> wrongWordIds) {
         for (Long id : wrongWordIds) {

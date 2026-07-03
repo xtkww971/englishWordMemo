@@ -2,6 +2,7 @@ package com.englishword.application.domain.Word.Controller;
 
 import com.englishword.application.domain.Word.Service.WordService;
 import com.englishword.application.domain.Word.Word;
+import com.englishword.application.domain.Word.dto.WrongWordResponseDto;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
@@ -46,5 +47,11 @@ public class WordController {
     public ResponseEntity<String> updateWrongCounts(@RequestBody List<Long> wrongWordIds) {
         wordService.reportWrongWords(wrongWordIds);
         return ResponseEntity.ok("오답 카운트가 MySQL에 성공적으로 반영되었습니다.");
+    }
+
+    @GetMapping("/wrongWords")
+    public ResponseEntity<List<WrongWordResponseDto>> getWrongWords() {
+        List<Word> words = wordService.getWrongWords();
+        return ResponseEntity.ok(words.stream().map(WrongWordResponseDto::from).toList());
     }
 }

@@ -22,4 +22,7 @@ public interface WordRepository extends JpaRepository<Word, Long> {
     // 3. MySQL 자체에서 랜덤으로 80개 단어 뽑아오기 (성능 및 확장성 최고)
     @Query(value = "SELECT * FROM words ORDER BY RAND() LIMIT 80", nativeQuery = true)
     List<Word> findRandom80Words();
+
+    @Query("SELECT w FROM Word w WHERE w.wrongCount >= 1 ORDER BY w.wrongCount DESC")
+    List<Word> findWrongWords();
 }
