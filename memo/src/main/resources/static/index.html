@@ -10,8 +10,9 @@
         body { background-color: #f8f9fa; padding-top: 30px; }
         .card { margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
         .hidden { display: none; }
-        .word-card { font-size: 1.5rem; text-align: center; padding: 4px 0; }
         .cursor-pointer { cursor: pointer; }
+        .meaning-blur { filter: blur(5px); transition: filter 0.3s; }
+        .meaning-blur:hover { filter: blur(0px); }
     </style>
 </head>
 <body>
@@ -26,11 +27,13 @@
             <div class="col-md-12 mb-4">
                 <div class="p-5 text-white bg-dark rounded-3 text-center">
                     <h2><i class="bi bi-lightning-charge-fill text-warning"></i> 전체 단어 챌린지</h2>
-                    <p>MySQL 데이터베이스에 등록된 모든 단어 중 무작위로 80개를 뽑아 시험을 치릅니다.</p>
+                    <p>MySQL에 등록된 모든 단어 중 무작위로 80개를 골라 통째로 시험을 봅니다.</p>
                     <button class="btn btn-outline-light btn-lg" type="button" onclick="startRandom80Exam()">지금 80개 시험보기</button>
+                    <button class="btn btn-danger btn-lg fw-bold" type="button" onclick="loadWrongNotebook()">
+                        <i class="bi bi-book-half me-1"></i> 틀린 단어 모음 (오답 노트)
+                    </button>
                 </div>
             </div>
-
             <div class="col-md-12">
                 <div class="card">
                     <div class="card-header bg-primary text-white">
@@ -48,229 +51,57 @@
 
     <div id="study-view" class="hidden">
         <button class="btn btn-secondary mb-3" onclick="showHome()">
-            <i class="bi bi-arrow-left-short"></i> <i class="bi bi-house-door"></i> 메인으로 돌아가기
+            <i class="bi bi-arrow-left-short"></i> 메인으로 돌아가기
         </button>
         <div class="card">
-            <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
-                <h3 id="selected-date-title" class="mb-0">2026-07-02 단어장</h3>
-                <button id="btn-date-exam" class="btn btn-light btn-sm fw-bold">
-                    <i class="bi bi-pencil-square me-1"></i> 이 날짜 단어 시험보기
-                </button>
+            <div id="study-card-header" class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                <h3 id="selected-date-title" class="mb-0">단어장</h3>
+                <button id="btn-date-exam" class="btn btn-light btn-sm fw-bold">✏️ 이 날짜 단어 시험보기</button>
             </div>
             <div class="card-body">
-                <table class="table table-striped text-center">
+                <table class="table table-striped text-center align-middle">
                     <thead>
                     <tr>
-                        <th>단어 (Word)</th>
-                        <th>뜻 (Meaning)</th>
-                        <th>틀린 횟수 (MySQL)</th>
+                        <th style="width: 30%;">단어 (Word)</th>
+                        <th style="width: 50%;">뜻 (Meaning)</th>
+                        <th style="width: 20%;">틀린 횟수 (MySQL)</th>
                     </tr>
                     </thead>
-                    <tbody id="word-table-body">
-                    </tbody>
+                    <tbody id="word-table-body"></tbody>
                 </table>
             </div>
         </div>
     </div>
 
     <div id="exam-view" class="hidden">
-        <div class="card mx-auto" style="max-width: 600px;">
-            <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
-                <strong><i class="bi bi-fire text-danger me-1"></i> <span id="exam-title">시험 진행 중</span></strong>
-                <span id="exam-progress" class="badge bg-dark">1 / 80</span>
-            </div>
-            <div class="card-body text-center py-5">
-                <h2 id="exam-word" class="display-4 mb-4">revision</h2>
-                <div class="mb-3">
-                    <input type="text" id="exam-answer" class="form-control form-control-lg text-center" placeholder="뜻을 입력하세요" autocomplete="off" onkeyup="if(window.event.keyCode==13){submitAnswer()}">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <button class="btn btn-secondary" onclick="showHome()"><i class="bi bi-x-lg"></i> 시험 중단하고 나가기</button>
+            <h2 id="exam-title" class="text-warning mb-0">🔥 단어 시험지</h2>
+            <button class="btn btn-danger btn-lg fw-bold" onclick="submitSelfGrading()"><i class="bi bi-check-all"></i> 채점 완료 및 제출</button>
+        </div>
+
+        <div class="card">
+            <div class="card-body">
+                <div class="alert alert-info text-center">
+                    <i class="bi bi-info-circle-fill"></i> 뜻을 적은 후, <strong>[정답 보기]</strong> 버튼을 눌러 본인이 틀린 단어의 체크박스를 체크하고 제출하세요!
                 </div>
-                <button class="btn btn-primary btn-lg w-100" onclick="submitAnswer()">다음 단어</button>
+
+                <table class="table table-bordered text-center align-middle">
+                    <thead class="table-light">
+                    <tr>
+                        <th style="width: 8%;">번호</th>
+                        <th style="width: 30%;">단어 (Word)</th>
+                        <th style="width: 35%;">나의 답안</th>
+                        <th style="width: 27%;">정답 확인 / 채점</th>
+                    </tr>
+                    </thead>
+                    <tbody id="exam-paper-body"></tbody>
+                </table>
             </div>
         </div>
     </div>
 </div>
 
-<script>
-    const BASE_URL = '/api/words';
-
-    // 상태 관리 변수들
-    let currentExamWords = [];
-    let currentExamIndex = 0;
-    let wrongWordIds = [];
-
-    // 페이지 로드 시 메인 날짜 리스트 조회
-    window.onload = function() {
-        loadDates();
-    };
-
-    function loadDates() {
-        fetch(`${BASE_URL}/dates`)
-            .then(res => {
-                // 응답이 정상인지 먼저 체크
-                if (!res.ok) throw new Error(`HTTP 에러! 상태코드: ${res.status}`);
-                return res.json();
-            })
-            .then(rawDates => {
-                console.log("📥 백엔드에서 받은 날짜 데이터:", rawDates); // 디버깅용 로그
-
-                let dates = rawDates;
-                // [안전장치] 혹시 데이터가 문자열(String) 형태로 넘어왔다면 배열로 변환
-                if (typeof rawDates === 'string') {
-                    dates = JSON.parse(rawDates);
-                }
-
-                const dateListDiv = document.getElementById('date-list');
-                dateListDiv.innerHTML = '';
-
-                // [안전장치] 최종 데이터가 배열이 맞는지 한 번 더 검증
-                if (!Array.isArray(dates) || dates.length === 0) {
-                    dateListDiv.innerHTML = '<p class="text-center text-muted">저장된 단어 데이터가 없습니다. 노션 동기화를 먼저 진행하세요.</p>';
-                    return;
-                }
-
-                // 날짜 화면에 그리기
-                dates.forEach(date => {
-                    // 만약 date가 객체 형태(예: [2026,7,2])로 들어오는 경우를 대비한 가공
-                    let dateStr = date;
-                    if (Array.isArray(date)) {
-                        // [2026, 7, 2] -> "2026-07-02" 포맷팅
-                        dateStr = `${date[0]}-${String(date[1]).padStart(2, '0')}-${String(date[2]).padStart(2, '0')}`;
-                    }
-
-                    const btn = document.createElement('button');
-                    btn.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center';
-                    btn.innerHTML = `<span><i class="bi bi-journal-bookmark text-primary me-2"></i><strong>${dateStr}</strong> 학습 단어장</span> <span class="badge bg-primary rounded-pill">보기</span>`;
-                    btn.onclick = () => loadDateWords(dateStr);
-
-                    dateListDiv.appendChild(btn);
-                });
-            })
-            .catch(err => {
-                console.error("❌ 날짜 로드 실패:", err);
-                const dateListDiv = document.getElementById('date-list');
-                dateListDiv.innerHTML = `<p class="text-center text-danger">데이터 로드 실패: ${err.message}</p>`;
-            });
-    }
-
-    // 2. 날짜 클릭 시: 단어 학습 뷰 오픈
-    function loadDateWords(date) {
-        fetch(`${BASE_URL}/date/${date}`)
-            .then(res => res.json())
-            .then(words => {
-                document.getElementById('selected-date-title').innerText = `📅 ${date} 단어장`;
-
-                // [시험보기] 버튼에 이벤트 바인딩
-                document.getElementById('btn-date-exam').onclick = () => startDateExam(date);
-
-                const tbody = document.getElementById('word-table-body');
-                tbody.innerHTML = '';
-
-                words.forEach(w => {
-                    // [⚠️ 중요 수정] 백엔드에서 전달되는 Entity/DTO의 날짜 필드 속성명이 'createdAt'으로 매핑됨
-                    const row = `<tr>
-                        <td class="fw-bold text-primary">${w.word}</td>
-                        <td>${w.meaning}</td>
-                        <td><span class="badge bg-danger">${w.wrongCount}회</span></td>
-                    </tr>`;
-                    tbody.innerHTML += row;
-                });
-
-                switchView('study-view');
-            });
-    }
-
-    // 3. 특정 날짜 시험 시작
-    function startDateExam(date) {
-        fetch(`${BASE_URL}/exam/date/${date}`)
-            .then(res => res.json())
-            .then(words => startExamSetup(words, `${date} 단어 시험`));
-    }
-
-    // 4. 전체 랜덤 80개 시험 시작
-    function startRandom80Exam() {
-        fetch(`${BASE_URL}/exam/random80`)
-            .then(res => res.json())
-            .then(words => startExamSetup(words, `전체 랜덤 80 챌린지`));
-    }
-
-    // 시험 데이터 초기화 공통 셋업
-    function startExamSetup(words, title) {
-        if(words.length === 0) {
-            alert("시험을 볼 단어가 없습니다.");
-            return;
-        }
-        currentExamWords = words;
-        currentExamIndex = 0;
-        wrongWordIds = [];
-
-        document.getElementById('exam-title').innerText = title;
-        switchView('exam-view');
-        nextQuestion();
-    }
-
-    // 다음 문제 출제
-    function nextQuestion() {
-        if (currentExamIndex >= currentExamWords.length) {
-            finishExam();
-            return;
-        }
-
-        const currentWord = currentExamWords[currentExamIndex];
-        document.getElementById('exam-progress').innerText = `${currentExamIndex + 1} / ${currentExamWords.length}`;
-        document.getElementById('exam-word').innerText = currentWord.word;
-        document.getElementById('exam-answer').value = '';
-        document.getElementById('exam-answer').focus();
-    }
-
-    // 정답 제출 및 채점
-    function submitAnswer() {
-        const userAnswer = document.getElementById('exam-answer').value.trim();
-        const currentWord = currentExamWords[currentExamIndex];
-
-        if (!userAnswer || !currentWord.meaning.includes(userAnswer)) {
-            wrongWordIds.push(currentWord.id);
-            alert(`틀렸습니다! ❌\n정답: ${currentWord.meaning}`);
-        } else {
-            alert("정답입니다! ⭕");
-        }
-
-        currentExamIndex++;
-        nextQuestion();
-    }
-
-    // 시험 종료 및 오답 데이터 MySQL 전송 완료
-    function finishExam() {
-        alert(`시험이 종료되었습니다!\n총 ${currentExamWords.length}문제 중 ${wrongWordIds.length}개 틀렸습니다.`);
-
-        if (wrongWordIds.length > 0) {
-            fetch(`${BASE_URL}/exam/wrong`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(wrongWordIds)
-            })
-            .then(res => {
-                if(res.ok) console.log("MySQL 오답 카운트 누적 성공");
-                showHome();
-            }).catch(err => console.error("오답 카운트 전송 실패:", err));
-        } else {
-            showHome();
-        }
-    }
-
-    // 화면 전환 유틸리티
-    function switchView(viewId) {
-        document.getElementById('home-view').classList.add('hidden');
-        document.getElementById('study-view').classList.add('hidden');
-        document.getElementById('exam-view').classList.add('hidden');
-
-        document.getElementById(viewId).classList.remove('hidden');
-    }
-
-    function showHome() {
-        loadDates();
-        switchView('home-view');
-    }
-</script>
-
+<script src="/js/word-app.js"></script>
 </body>
 </html>
